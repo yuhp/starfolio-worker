@@ -36,7 +36,7 @@ Create a GitHub personal access token for the account that is an administrator o
 
 Use the least-privileged token that can access the configured repositories. Save it as the GitHub repository secret `STAR_HISTORY_TOKEN`.
 
-At deploy time, GitHub Actions writes this value to the Cloudflare Worker as the standard Worker Secret `GITHUB_TOKEN`. It is not included in source code, generated deployment configuration, or the public Worker response.
+Run the **Sync Star Token** workflow after initially setting or rotating this secret. It writes the value to the Cloudflare Worker as the standard Worker Secret `GITHUB_TOKEN`. It is not included in source code, generated deployment configuration, or the public Worker response.
 
 ## 4. Configure GitHub Repository Secrets
 
@@ -61,7 +61,9 @@ In **Settings** > **Secrets and variables** > **Actions** > **Variables**, add:
 
 Push to `main`, or select **Actions** > **Deploy Worker** > **Run workflow**.
 
-The workflow runs type checks and tests, generates a temporary `wrangler.jsonc`, updates the Worker `GITHUB_TOKEN` secret, and deploys the Worker with an hourly Cron Trigger.
+The deployment workflow runs type checks and tests, generates a temporary `wrangler.jsonc`, and deploys the Worker with an hourly Cron Trigger.
+
+Before the first deployment, run **Actions** > **Sync Star Token** > **Run workflow** once. Run it again only when `STAR_HISTORY_TOKEN` changes. Keeping token synchronization separate avoids creating an additional Worker version for every code deployment.
 
 After deployment, verify the health endpoint:
 

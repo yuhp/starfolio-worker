@@ -95,7 +95,7 @@ The curve uses every date with one or more new stars as a source point. The five
 
 ## Deploy With GitHub Actions
 
-The deployment workflow generates a temporary `wrangler.jsonc` from repository configuration, updates the Worker runtime secret, then deploys the Worker. No deployment-specific IDs are committed to this repository.
+The deployment workflow generates a temporary `wrangler.jsonc` from repository configuration and deploys the Worker. No deployment-specific IDs are committed to this repository.
 
 See [Deployment](docs/deploy.md) for the complete Cloudflare and GitHub setup, including least-privilege Cloudflare API Token permissions, KV creation, GitHub credentials, and verification.
 
@@ -115,6 +115,8 @@ Create these GitHub repository variables:
 | `CLOUDFLARE_KV_NAMESPACE_ID` | ID of the KV namespace bound as `KV_StarHistory`. |
 
 Push to `main` or run the **Deploy Worker** workflow manually. Pull requests and all pushes run type checks and tests without deploying.
+
+Run the separate **Sync Star Token** workflow only after initially setting or rotating `STAR_HISTORY_TOKEN`. It writes that GitHub secret to the Worker as `GITHUB_TOKEN` without triggering a code deployment.
 
 For a manual deployment, create `wrangler.jsonc` as above, authenticate with `npx wrangler login`, set the production secret, then deploy:
 

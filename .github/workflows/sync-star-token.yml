@@ -1,0 +1,27 @@
+name: Sync Star Token
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-star-token
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v6
+      - name: Sync Worker secret
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: whoami
+          secrets: GITHUB_TOKEN
+        env:
+          GITHUB_TOKEN: ${{ secrets.STAR_HISTORY_TOKEN }}

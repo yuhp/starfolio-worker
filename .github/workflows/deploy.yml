@@ -35,6 +35,3 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          secrets: GITHUB_TOKEN
-        env:
-          GITHUB_TOKEN: ${{ secrets.STAR_HISTORY_TOKEN }}
