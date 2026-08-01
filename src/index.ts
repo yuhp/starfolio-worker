@@ -5,6 +5,7 @@ interface Env {
 
 import { renderChart } from "./chart.js";
 import { projects } from "./projects.js";
+import { samplePageNumbers, sampleStarNumbers, starsAtStargazer } from "./sampling.js";
 
 interface StarHistoryMetadata {
   refreshedAt: string;
@@ -16,51 +17,86 @@ const THEMES = ["light", "dark"] as const;
 
 type Theme = typeof THEMES[number];
 
+interface Repository {
+  created_at: string;
+  stargazers_count: number;
+}
+
 interface Stargazer {
   starred_at: string;
+}
+
+interface StarHistory {
+  createdAt: string;
+  totalStars: number;
+  samples: Array<{ starredAt: string; stars: number }>;
 }
 
 function cacheKey(project: string, theme: Theme) {
   return `star-history:${project}:${theme}`;
 }
 
-async function fetchStargazers(repository: string, token: string) {
-  const stargazers: Stargazer[] = [];
+function githubHeaders(token: string, accept = "application/vnd.github+json") {
+  return {
+    Accept: accept,
+    Authorization: `Bearer ${token}`,
+    "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": "starfolio-worker",
+  };
+}
 
-  let url: string | null = `${GITHUB_API}/repos/${repository}/stargazers?per_page=100`;
-  while (url !== null) {
-    const response = await fetch(url, {
-      headers: {
-        Accept: "application/vnd.github.star+json",
-        Authorization: `Bearer ${token}`,
-        "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "starfolio-worker",
-      },
-      signal: AbortSignal.timeout(15_000),
-    });
+async function githubFetch(url: string, repository: string, token: string, accept?: string) {
+  const response = await fetch(url, {
+    headers: githubHeaders(token, accept),
+    signal: AbortSignal.timeout(15_000),
+  });
 
-    if (!response.ok) {
-      const reset = response.headers.get("x-ratelimit-reset");
-      const retryAt = reset === null ? "" : `; rate limit resets at ${new Date(Number(reset) * 1000).toISOString()}`;
-      throw new Error(`GitHub returned ${response.status} for ${repository}${retryAt}`);
-    }
-
-    const pageStargazers = (await response.json()) as Stargazer[];
-    stargazers.push(...pageStargazers);
-    const next = response.headers.get("link")?.match(/<([^>]+)>; rel="next"/);
-    url = next?.[1] ?? null;
+  if (!response.ok) {
+    const reset = response.headers.get("x-ratelimit-reset");
+    const retryAt = reset === null ? "" : `; rate limit resets at ${new Date(Number(reset) * 1000).toISOString()}`;
+    throw new Error(`GitHub returned ${response.status} for ${repository}${retryAt}`);
   }
 
-  return stargazers;
+  return response;
+}
+
+async function fetchStarHistory(repository: string, token: string): Promise<StarHistory> {
+  const metadata = await githubFetch(`${GITHUB_API}/repos/${repository}`, repository, token);
+  const { created_at: createdAt, stargazers_count: totalStars } = await metadata.json() as Repository;
+  const starNumbers = sampleStarNumbers(totalStars);
+  const pages = samplePageNumbers(starNumbers);
+  const sampledPages = await Promise.all(pages.map(async (page) => {
+    const response = await githubFetch(
+      `${GITHUB_API}/repos/${repository}/stargazers?per_page=100&page=${page}`,
+      repository,
+      token,
+      "application/vnd.github.star+json",
+    );
+    const stargazers = await response.json() as Stargazer[];
+    return stargazers.map((stargazer, index) => ({
+      starredAt: stargazer.starred_at,
+      stars: starsAtStargazer(totalStars, page, index),
+    }));
+  }));
+
+  const sampledStargazers = new Map(sampledPages.flat().map((sample) => [sample.stars, sample]));
+
+  return {
+    createdAt,
+    totalStars,
+    samples: starNumbers.map((star) => sampledStargazers.get(star))
+      .filter((sample): sample is NonNullable<typeof sample> => sample !== undefined)
+      .sort((left, right) => left.starredAt.localeCompare(right.starredAt)),
+  };
 }
 
 async function refreshProject(project: string, repository: string, env: Env) {
-  const stargazers = await fetchStargazers(repository, env.GITHUB_TOKEN);
+  const history = await fetchStarHistory(repository, env.GITHUB_TOKEN);
   const refreshedAt = new Date().toISOString();
 
   await Promise.all(THEMES.map((theme) => env.KV_StarHistory.put(
     cacheKey(project, theme),
-    renderChart(repository, stargazers, theme),
+    renderChart(repository, history, theme),
     { metadata: { refreshedAt } },
   )));
 }

@@ -1,9 +1,14 @@
-interface Stargazer {
-  starred_at: string;
+interface StarHistory {
+  createdAt: string;
+  totalStars: number;
+  samples: Array<{
+    starredAt: string;
+    stars: number;
+  }>;
 }
 
 export function renderChart(
   repository: string,
-  stargazers: Stargazer[],
+  history: StarHistory,
   theme: "light" | "dark",
 ): string;

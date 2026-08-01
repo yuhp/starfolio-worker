@@ -46,7 +46,7 @@ function smoothPath(points) {
   return `${path} L ${last.x.toFixed(2)} ${last.y.toFixed(2)}`;
 }
 
-export function renderChart(repository, stargazers, theme = "light") {
+export function renderChart(repository, history, theme = "light") {
   const colors = THEMES[theme];
   const width = 1200;
   const height = 800;
@@ -55,25 +55,20 @@ export function renderChart(repository, stargazers, theme = "light") {
   const chartHeight = height - padding.top - padding.bottom;
   const chartEnd = width - padding.right;
   const chartBottom = padding.top + chartHeight;
-  const dailyStars = new Map();
-
-  for (const stargazer of stargazers) {
-    const day = stargazer.starred_at.slice(0, 10);
-    dailyStars.set(day, (dailyStars.get(day) ?? 0) + 1);
-  }
-
-  const days = [...dailyStars.keys()].sort();
-  const firstDate = days.length === 0 ? Date.now() : Date.parse(`${days[0]}T00:00:00Z`);
-  const lastDate = days.length === 0 ? Date.now() : Date.parse(`${days.at(-1)}T00:00:00Z`);
+  const firstDate = Date.parse(history.createdAt);
+  const lastDate = Date.now();
   const duration = Math.max(lastDate - firstDate, 1);
-  const maxStars = Math.max(stargazers.length, 1);
-  let total = 0;
-  const points = days.map((day) => {
-    total += dailyStars.get(day) ?? 0;
-    const timestamp = Date.parse(`${day}T00:00:00Z`);
+  const maxStars = Math.max(history.totalStars, 1);
+  const samples = [
+    { starredAt: history.createdAt, stars: 0 },
+    ...history.samples,
+    { starredAt: new Date(lastDate).toISOString(), stars: history.totalStars },
+  ];
+  const points = samples.map(({ starredAt, stars }) => {
+    const timestamp = Date.parse(starredAt);
     return {
       x: padding.left + ((timestamp - firstDate) / duration) * chartWidth,
-      y: chartBottom - (total / maxStars) * chartHeight,
+      y: chartBottom - (stars / maxStars) * chartHeight,
     };
   });
   const linePath = smoothPath(points.length === 1 ? [{ x: padding.left, y: chartBottom }, points[0]] : points);
@@ -92,7 +87,7 @@ export function renderChart(repository, stargazers, theme = "light") {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="title description">
   <title id="title">Star history for ${escapeXml(repository)}</title>
-  <desc id="description">${stargazers.length} GitHub stars from ${formatDate(firstDate)} to ${formatDate(lastDate)}</desc>
+  <desc id="description">${history.totalStars} GitHub stars from ${formatDate(firstDate)} to ${formatDate(lastDate)}</desc>
   <defs>
     <filter id="xkcdify" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="1" seed="7" result="noise"/><feDisplacementMap in="SourceGraphic" in2="noise" scale="1.4" xChannelSelector="R" yChannelSelector="G"/></filter>
   </defs>
@@ -107,7 +102,7 @@ export function renderChart(repository, stargazers, theme = "light") {
   <circle cx="${padding.left + 14}" cy="${padding.top + 29}" r="7" fill="${colors.line}"/>
   <text class="legend" x="${padding.left + 30}" y="${padding.top + 36}">${escapeXml(repository)}</text>
   <circle class="endpoint" cx="${lastPoint.x}" cy="${lastPoint.y}" r="7"/>
-  <text class="final" x="${labelX}" y="${labelY}">${stargazers.length.toLocaleString()}</text>
+  <text class="final" x="${labelX}" y="${labelY}">${history.totalStars.toLocaleString()}</text>
   <text class="axis-label" x="${padding.left + chartWidth / 2}" y="${height - 28}" text-anchor="middle">Date</text>
   <text class="axis-label" x="33" y="${padding.top + chartHeight / 2}" text-anchor="middle" transform="rotate(-90 33 ${padding.top + chartHeight / 2})">GitHub Stars</text>
 </svg>`;

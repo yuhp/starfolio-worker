@@ -15,7 +15,7 @@ By deploying this Worker in your own Cloudflare account and using your own GitHu
 - Serves static SVG charts from Cloudflare KV.
 - Refreshes configured repositories every hour with a Cloudflare Cron Trigger.
 - Supports `light` and `dark` themes.
-- Uses GitHub stargazer timestamps to render cumulative star history.
+- Uses bounded, evenly distributed GitHub stargazer samples to render cumulative star history, including repositories with hundreds of thousands of stars.
 - Is deployable from GitHub Actions without committing Cloudflare IDs or tokens.
 
 ## Example Charts
@@ -61,7 +61,7 @@ star-history:{project}:light
 star-history:{project}:dark
 ```
 
-The curve uses every date with one or more new stars as a source point. The five x-axis date labels are display ticks only; they do not aggregate or alter the data.
+Each refresh divides every repository into the same 15 equal cumulative-Star segments. It reads the repository's total star count and creation date, then concurrently requests only the stargazer pages containing the 14 internal segment boundaries. The chart uses those boundary timestamps together with repository creation and current-total endpoints, so all charts have the same smooth 15-segment resolution. This requires at most 15 GitHub requests per repository, including the metadata request.
 
 ## Local Development
 

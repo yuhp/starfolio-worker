@@ -18,7 +18,7 @@ flowchart LR
 
   Cron[Cloudflare Cron: hourly] --> Projects[Read configured project list]
   Projects --> GitHub[GitHub Stargazers API]
-  GitHub --> Aggregate[Aggregate daily stars into cumulative history]
+   GitHub --> Sample[Sample bounded stargazer pages into cumulative history]
   Aggregate --> Render[Render light and dark SVG charts]
   Render --> WriteKV[Write SVG and refresh metadata to KV]
   WriteKV --> ReadKV
@@ -36,7 +36,8 @@ The two flows are independent in normal operation:
 | --- | --- |
 | `src/projects.js` | Public registry of URL-safe project slugs and GitHub `owner/repository` values. |
 | `src/index.ts` | Worker routes, project and theme validation, KV reads, scheduled refresh orchestration, and GitHub API access. |
-| `src/chart.js` | Converts star timestamps into cumulative series data and renders SVG for the selected theme. |
+| `src/chart.js` | Converts sampled timestamp and cumulative-total points into SVG for the selected theme. |
+| `src/sampling.js` | Calculates evenly distributed stargazer pages and their cumulative totals. |
 | Cloudflare KV | Stores generated SVG content and `refreshedAt` metadata. |
 | Cloudflare Cron Trigger | Invokes `scheduled()` every hour. |
 | GitHub API | Supplies `starred_at` timestamps for configured public repositories. |
@@ -72,14 +73,15 @@ The SVG response includes `X-Star-History-Refreshed-At` so consumers can inspect
 
 For every configured repository, the refresh job:
 
-1. Requests GitHub's stargazers endpoint with the `application/vnd.github.star+json` media type.
-2. Reads each stargazer's `starred_at` timestamp.
-3. Groups stars by UTC date.
-4. Accumulates each day's additions into the total-star series.
-5. Draws a smooth cumulative curve and five display-only date ticks.
-6. Renders light and dark SVG variants, including a final total-star label to the right of the curve endpoint.
+1. Requests repository metadata to read its creation date and current total star count.
+2. Splits the cumulative total into 15 equal segments and calculates the 14 internal Star-number boundaries.
+3. Requests the distinct stargazer pages containing those boundaries concurrently with the `application/vnd.github.star+json` media type.
+4. GitHub returns stargazers oldest first, so converts every returned timestamp to a cumulative total: `(page - 1) * 100 + index + 1`.
+5. Selects the exact 14 boundary timestamps and adds the repository creation `(createdAt, 0)` and current `(now, totalStars)` endpoints.
+6. Draws a smooth cumulative curve and five display-only date ticks.
+7. Renders light and dark SVG variants, including a final total-star label to the right of the curve endpoint.
 
-The date ticks do not aggregate the underlying data. All dates on which at least one star was received remain source points for the curve.
+The refresh requires at most 15 GitHub requests per repository: one metadata request and at most 14 distinct sampled stargazer pages. Every repository, regardless of size, renders from the same 15 equal cumulative-Star segments. The date ticks do not change the sampled source points.
 
 ## Failure Behavior
 
@@ -99,7 +101,7 @@ The public repository must not contain deployment-specific IDs or tokens. GitHub
 | --- | --- |
 | `CLOUDFLARE_API_TOKEN` secret | Authenticates the deployment workflow to Cloudflare. |
 | `CLOUDFLARE_ACCOUNT_ID` secret | Selects the Cloudflare account. |
-| `GITHUB_STAR_TOKEN` secret | Written to the Worker as the `GITHUB_TOKEN` runtime secret. |
+| `STAR_HISTORY_TOKEN` secret | Written to the Worker as the `GITHUB_TOKEN` runtime secret. |
 | `CLOUDFLARE_WORKER_NAME` variable | Chooses the deployed Worker name. |
 | `CLOUDFLARE_KV_NAMESPACE_ID` variable | Binds the deployment to the intended KV namespace. |
 
