@@ -16,6 +16,14 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Create deployment configuration
+        run: node scripts/create-wrangler-config.mjs
+        env:
+          CLOUDFLARE_WORKER_NAME: ${{ vars.CLOUDFLARE_WORKER_NAME }}
+          CLOUDFLARE_KV_NAMESPACE_ID: ${{ vars.CLOUDFLARE_KV_NAMESPACE_ID }}
       - name: Sync Worker secret
         uses: cloudflare/wrangler-action@v4
         with:
