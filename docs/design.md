@@ -40,7 +40,7 @@ The two flows are independent in normal operation:
 | Cloudflare KV | Stores generated SVG content and `refreshedAt` metadata. |
 | Cloudflare Cron Trigger | Invokes `scheduled()` every hour. |
 | GitHub API | Supplies `starred_at` timestamps for configured public repositories. |
-| `GITHUB_TOKEN` Worker Secret | Authenticates GitHub API requests; it is never returned to users or committed to the repository. |
+| `GITHUB_TOKEN` Worker Secret | Authenticates GitHub API requests. Its owner must be an administrator or collaborator of every tracked repository; it is never returned to users or committed to the repository. |
 
 ## Public Routes
 

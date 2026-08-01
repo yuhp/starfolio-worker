@@ -1,6 +1,14 @@
 # Starfolio Worker
 
-A self-hosted Cloudflare Worker that generates and caches GitHub star-history SVG charts. It uses the GitHub API directly, so it does not depend on the Star History API.
+A self-deployable Cloudflare Worker that generates and caches GitHub star-history SVG charts. It uses the GitHub API directly, so it does not depend on the Star History API.
+
+## Origin
+
+Starfolio Worker was originally inspired by [Star History](https://github.com/star-history/star-history), including its hand-drawn chart visual language.
+
+It exists because GitHub is restricting its stargazers API, the endpoint that returns who starred a repository and when. As announced on June 30, 2026, access to this data is being limited to a repository's own administrators and collaborators. This makes it impractical for a shared Star History-style SaaS to fetch star timestamps using a read-only token supplied for an arbitrary public repository.
+
+By deploying this Worker in your own Cloudflare account and using your own GitHub token, you control the API credentials and the repository list used to generate the cached charts. The token stays in your Cloudflare Worker Secret rather than being supplied to a third-party chart SaaS, reducing the risk of exposing a higher-privilege token outside your own deployment.
 
 ## Features
 
@@ -9,6 +17,16 @@ A self-hosted Cloudflare Worker that generates and caches GitHub star-history SV
 - Supports `light` and `dark` themes.
 - Uses GitHub stargazer timestamps to render cumulative star history.
 - Is deployable from GitHub Actions without committing Cloudflare IDs or tokens.
+
+## Example Charts
+
+### Dark
+
+![Dark star history chart](https://sh.yuhp.dev/star-history/opencode-models-discovery?theme=dark)
+
+### Light
+
+![Light star history chart](https://sh.yuhp.dev/star-history/opencode-models-discovery?theme=light)
 
 ## Routes
 
@@ -59,7 +77,7 @@ The curve uses every date with one or more new stars as a source point. The five
    cp .dev.vars.example .dev.vars
    ```
 
-3. Set `GITHUB_TOKEN` in `.dev.vars`. A fine-grained token needs read access to the tracked public repositories. A classic token needs the `public_repo` scope.
+3. Set `GITHUB_TOKEN` in `.dev.vars`. The token owner must be an administrator or collaborator of every tracked repository because GitHub restricts stargazer timestamps to those roles. Use the least-privileged token that grants access to the configured repositories.
 
 4. Copy the Cloudflare configuration template and fill in your Worker name and KV namespace ID:
 
@@ -79,13 +97,15 @@ The curve uses every date with one or more new stars as a source point. The five
 
 The deployment workflow generates a temporary `wrangler.jsonc` from repository configuration, updates the Worker runtime secret, then deploys the Worker. No deployment-specific IDs are committed to this repository.
 
+See [Deployment](docs/deploy.md) for the complete Cloudflare and GitHub setup, including least-privilege Cloudflare API Token permissions, KV creation, GitHub credentials, and verification.
+
 Create these GitHub repository secrets:
 
 | Secret | Purpose |
 | --- | --- |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare API token with permission to deploy the target Worker. |
 | `CLOUDFLARE_ACCOUNT_ID` | Target Cloudflare account ID. |
-| `GITHUB_STAR_TOKEN` | GitHub token written to the deployed Worker as its `GITHUB_TOKEN` runtime secret. |
+| `STAR_HISTORY_TOKEN` | GitHub token written to the deployed Worker as its `GITHUB_TOKEN` runtime secret. Its owner must be an administrator or collaborator of every tracked repository. |
 
 Create these GitHub repository variables:
 
@@ -116,7 +136,7 @@ npm test
 
 ## Acknowledgements
 
-The chart's hand-drawn visual language is inspired by [Star History](https://github.com/star-history/star-history). Starfolio Worker is independent, does not call the Star History API, and is not affiliated with the Star History project.
+Starfolio Worker is independent, does not call the Star History API, and is not affiliated with the Star History project.
 
 ## License
 
