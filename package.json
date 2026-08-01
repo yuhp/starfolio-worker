@@ -1,0 +1,19 @@
+{
+  "name": "starfolio-worker",
+  "private": false,
+  "version": "0.1.0",
+  "description": "A self-hosted Cloudflare Worker for GitHub star-history SVG charts.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "tsc --noEmit",
+    "test": "node --test test/**/*.test.js"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260730.1",
+    "typescript": "^5.8.3",
+    "wrangler": "^4.27.0"
+  }
+}
