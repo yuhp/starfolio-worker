@@ -1,6 +1,26 @@
 # Starfolio Worker
 
-A self-deployable Cloudflare Worker that generates and caches GitHub star-history SVG charts. It uses the GitHub API directly, so it does not depend on the Star History API.
+A self-deployable Cloudflare Worker that generates and caches GitHub star-history SVG charts. It uses the GitHub API directly, so it does not depend on the Star History API or send your GitHub token to a chart SaaS.
+
+> **For maintainers affected by GitHub's stargazers API restriction:** deploy Starfolio Worker in your own Cloudflare account, keep the token in a Worker Secret, and embed the cached SVG in your README.
+
+## Is This For You?
+
+Use Starfolio Worker when you:
+
+- own or collaborate on the repositories whose star history you want to show;
+- have a Cloudflare account and can create a KV namespace;
+- want a public README chart without putting a GitHub token in the README or handing it to a third-party chart service.
+
+It cannot recover star timestamps for repositories where the token owner is neither an administrator nor a collaborator. It does not bypass GitHub's access restriction.
+
+## Quick Start
+
+1. Add the repositories you want to track in [`src/projects.js`](src/projects.js).
+2. Create a Cloudflare KV namespace and add the GitHub Actions secrets and variables listed in the [deployment guide](docs/deploy.md).
+3. Push to `main`, run **Sync Star Token** once, then add the generated image URL to your README.
+
+The full setup, including the least-privilege Cloudflare deployment token, is in [docs/deploy.md](docs/deploy.md). Read [SECURITY.md](SECURITY.md) before creating the GitHub token.
 
 ## Origin
 
@@ -27,6 +47,29 @@ By deploying this Worker in your own Cloudflare account and using your own GitHu
 ### Light
 
 ![Light star history chart](https://sh.yuhp.dev/star-history/opencode-models-discovery?theme=light)
+
+## Embed In A README
+
+Use `<picture>` to automatically show the matching chart for a reader's light or dark system theme. Replace the Worker domain and project slug with your own values:
+
+```html
+<a href="https://github.com/owner/repository">
+  <picture>
+    <source
+      media="(prefers-color-scheme: dark)"
+      srcset="https://your-worker.your-subdomain.workers.dev/star-history/project-slug?theme=dark"
+    />
+    <source
+      media="(prefers-color-scheme: light)"
+      srcset="https://your-worker.your-subdomain.workers.dev/star-history/project-slug?theme=light"
+    />
+    <img
+      alt="Star history chart"
+      src="https://your-worker.your-subdomain.workers.dev/star-history/project-slug?theme=light"
+    />
+  </picture>
+</a>
+```
 
 ## Routes
 
@@ -61,7 +104,7 @@ star-history:{project}:light
 star-history:{project}:dark
 ```
 
-Each refresh divides every repository into the same 15 equal cumulative-Star segments. It reads the repository's total star count and creation date, then concurrently requests only the stargazer pages containing the 14 internal segment boundaries. The chart uses those boundary timestamps together with repository creation and current-total endpoints, so all charts have the same smooth 15-segment resolution. This requires at most 15 GitHub requests per repository, including the metadata request.
+Each refresh divides a repository into at most 15 equal cumulative-Star segments. It reads the repository's total star count and creation date, then concurrently requests only the stargazer pages containing the internal segment boundaries. The chart uses those boundary timestamps together with repository creation and current-total endpoints. Repositories with fewer than 15 stars use their available unique boundaries. This requires at most 15 GitHub requests per repository, including the metadata request.
 
 ## Local Development
 
@@ -128,6 +171,20 @@ npm run deploy
 ## Architecture
 
 See [docs/design.md](docs/design.md) for the request path, scheduled refresh flow, cache model, and failure behavior.
+
+## FAQ
+
+### Is Star History down?
+
+No. Star History is still available. GitHub now limits the stargazers endpoint, which supplies the timestamps needed for a growth chart, to a repository's administrators and collaborators. That restriction makes it difficult for a shared service to fetch the history for arbitrary repositories.
+
+### Why not use a live third-party embed with my token?
+
+The token that can now read stargazer timestamps is no longer an unscoped read-only credential. Starfolio Worker does not remove that GitHub requirement, but it keeps the token in a Cloudflare Worker Secret under your account and only serves the generated SVG publicly. See [SECURITY.md](SECURITY.md) for scope and handling guidance.
+
+### Does every README view call the GitHub API?
+
+No. Public requests read a completed SVG from KV. The scheduled Worker job refreshes chart data hourly. On a first cache miss, the endpoint starts a background refresh and returns `503` with `Retry-After: 10`; it preserves the last successful chart if a later refresh fails.
 
 ## Development
 

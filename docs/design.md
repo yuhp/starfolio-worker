@@ -74,14 +74,14 @@ The SVG response includes `X-Star-History-Refreshed-At` so consumers can inspect
 For every configured repository, the refresh job:
 
 1. Requests repository metadata to read its creation date and current total star count.
-2. Splits the cumulative total into 15 equal segments and calculates the 14 internal Star-number boundaries.
+2. Splits the cumulative total into at most 15 equal segments and calculates up to 14 unique internal Star-number boundaries.
 3. Requests the distinct stargazer pages containing those boundaries concurrently with the `application/vnd.github.star+json` media type.
 4. GitHub returns stargazers oldest first, so converts every returned timestamp to a cumulative total: `(page - 1) * 100 + index + 1`.
-5. Selects the exact 14 boundary timestamps and adds the repository creation `(createdAt, 0)` and current `(now, totalStars)` endpoints.
+5. Selects the internal boundary timestamps and adds the repository creation `(createdAt, 0)` and current `(now, totalStars)` endpoints.
 6. Draws a smooth cumulative curve and five display-only date ticks.
 7. Renders light and dark SVG variants, including a final total-star label to the right of the curve endpoint.
 
-The refresh requires at most 15 GitHub requests per repository: one metadata request and at most 14 distinct sampled stargazer pages. Every repository, regardless of size, renders from the same 15 equal cumulative-Star segments. The date ticks do not change the sampled source points.
+The refresh requires at most 15 GitHub requests per repository: one metadata request and at most 14 distinct sampled stargazer pages. Repositories with 15 or more stars render from 15 equal cumulative-Star segments; smaller repositories use their available unique boundaries. The date ticks do not change the sampled source points.
 
 ## Failure Behavior
 
