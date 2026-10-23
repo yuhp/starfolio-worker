@@ -1,11 +1,16 @@
 interface Env {
   KV_StarHistory: KVNamespace;
-  GITHUB_TOKEN: string;
+  GITHUB_TOKEN?: string;
 }
 
 import { renderChart } from "./chart.js";
 import { projects } from "./projects.js";
-import { samplePageNumbers, sampleStarNumbers, starsAtStargazer } from "./sampling.js";
+import {
+  cumulativeWeeks,
+  lastStarTimestamp,
+  sampleCumulativeSeries,
+  type WeeklyStars,
+} from "./sampling.js";
 
 interface StarHistoryMetadata {
   refreshedAt: string;
@@ -22,12 +27,9 @@ interface Repository {
   stargazers_count: number;
 }
 
-interface Stargazer {
-  starred_at: string;
-}
-
 interface StarHistory {
   createdAt: string;
+  lastStarAt: string | null;
   totalStars: number;
   samples: Array<{ starredAt: string; stars: number }>;
 }
@@ -36,18 +38,18 @@ function cacheKey(project: string, theme: Theme) {
   return `star-history:${project}:${theme}`;
 }
 
-function githubHeaders(token: string, accept = "application/vnd.github+json") {
+function githubHeaders(token?: string) {
   return {
-    Accept: accept,
-    Authorization: `Bearer ${token}`,
-    "X-GitHub-Api-Version": "2022-11-28",
+    Accept: "application/vnd.github+json",
+    ...(token === undefined || token === "" ? {} : { Authorization: `Bearer ${token}` }),
+    "X-GitHub-Api-Version": "2026-03-10",
     "User-Agent": "starfolio-worker",
   };
 }
 
-async function githubFetch(url: string, repository: string, token: string, accept?: string) {
+async function githubFetch(url: string, repository: string, token?: string) {
   const response = await fetch(url, {
-    headers: githubHeaders(token, accept),
+    headers: githubHeaders(token),
     signal: AbortSignal.timeout(15_000),
   });
 
@@ -60,33 +62,25 @@ async function githubFetch(url: string, repository: string, token: string, accep
   return response;
 }
 
-async function fetchStarHistory(repository: string, token: string): Promise<StarHistory> {
+async function fetchStarHistory(repository: string, token?: string): Promise<StarHistory> {
   const metadata = await githubFetch(`${GITHUB_API}/repos/${repository}`, repository, token);
   const { created_at: createdAt, stargazers_count: totalStars } = await metadata.json() as Repository;
-  const starNumbers = sampleStarNumbers(totalStars);
-  const pages = samplePageNumbers(starNumbers);
-  const sampledPages = await Promise.all(pages.map(async (page) => {
-    const response = await githubFetch(
-      `${GITHUB_API}/repos/${repository}/stargazers?per_page=100&page=${page}`,
-      repository,
-      token,
-      "application/vnd.github.star+json",
-    );
-    const stargazers = await response.json() as Stargazer[];
-    return stargazers.map((stargazer, index) => ({
-      starredAt: stargazer.starred_at,
-      stars: starsAtStargazer(totalStars, page, index),
-    }));
-  }));
 
-  const sampledStargazers = new Map(sampledPages.flat().map((sample) => [sample.stars, sample]));
+  const weeks: WeeklyStars[] = [];
+  let url: string | null =
+    `${GITHUB_API}/repos/${repository}/stargazers/history?per_page=30&page=1`;
+
+  while (url !== null) {
+    const response = await githubFetch(url, repository, token);
+    weeks.push(...await response.json() as WeeklyStars[]);
+    url = response.headers.get("link")?.match(/<([^>]+)>; rel="next"/)?.[1] ?? null;
+  }
 
   return {
     createdAt,
+    lastStarAt: lastStarTimestamp(weeks),
     totalStars,
-    samples: starNumbers.map((star) => sampledStargazers.get(star))
-      .filter((sample): sample is NonNullable<typeof sample> => sample !== undefined)
-      .sort((left, right) => left.starredAt.localeCompare(right.starredAt)),
+    samples: sampleCumulativeSeries(cumulativeWeeks(weeks), totalStars),
   };
 }
 

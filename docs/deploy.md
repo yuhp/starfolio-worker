@@ -30,11 +30,13 @@ If you later deploy the Worker on a custom domain or an existing zone route, als
 
 Save the token as the GitHub repository secret `CLOUDFLARE_API_TOKEN`. Do not commit it or put it in `wrangler.jsonc`.
 
-## 3. Create A GitHub Star Token
+## 3. Optionally Create A GitHub Star Token
 
-Create a GitHub personal access token for the account that is an administrator or collaborator of every repository configured in [`src/projects.js`](../src/projects.js). GitHub restricts stargazer timestamps to those roles. See [Security](../SECURITY.md) for the recommended token type, repository scope, expiration, and handling rules.
+A token is not required to read public star-history data, but anonymous GitHub API requests are limited to 60 per hour per IP. Scheduled refreshes are more reliable with a token, which raises the limit to 5,000 per hour.
 
-Use the least-privileged token that can access the configured repositories. Save it as the GitHub repository secret `STAR_HISTORY_TOKEN`.
+If you create one, prefer a fine-grained personal access token with read-only access to public repositories and no write permissions. See [Security](../SECURITY.md) for token scope, expiration, and handling rules.
+
+Save it as the GitHub repository secret `STAR_HISTORY_TOKEN`.
 
 Run the **Sync Star Token** workflow after initially setting or rotating this secret. It writes the value to the Cloudflare Worker as the standard Worker Secret `GITHUB_TOKEN`. It is not included in source code, generated deployment configuration, or the public Worker response.
 
@@ -46,7 +48,7 @@ Open **Settings** > **Secrets and variables** > **Actions** > **Secrets** in the
 | --- | --- |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare API token created in step 2. |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID that owns the Worker and KV namespace. |
-| `STAR_HISTORY_TOKEN` | GitHub token created in step 3. |
+| `STAR_HISTORY_TOKEN` | Optional GitHub token created in step 3. |
 
 ## 5. Configure GitHub Repository Variables
 
@@ -63,7 +65,7 @@ Push to `main`, or select **Actions** > **Deploy Worker** > **Run workflow**.
 
 The deployment workflow runs type checks and tests, generates a temporary `wrangler.jsonc`, and deploys the Worker with an hourly Cron Trigger.
 
-After the first deployment, run **Actions** > **Sync Star Token** > **Run workflow** once to write the Worker Secret. Run it again only when `STAR_HISTORY_TOKEN` changes. Keeping token synchronization separate avoids creating an additional Worker version for every code deployment.
+If you configured `STAR_HISTORY_TOKEN`, run **Actions** > **Sync Star Token** > **Run workflow** once after the first deployment to write the Worker Secret. Run it again only when the token changes. Keeping token synchronization separate avoids creating an additional Worker version for every code deployment. Without a token, the Worker still refreshes anonymously, subject to lower rate limits.
 
 After deployment, verify the health endpoint:
 
@@ -91,7 +93,7 @@ For a local Wrangler deployment, copy `wrangler.jsonc.example` to `wrangler.json
 
 ```bash
 npx wrangler login
-npx wrangler secret put GITHUB_TOKEN
+npx wrangler secret put GITHUB_TOKEN   # optional
 npm run deploy
 ```
 

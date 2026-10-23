@@ -2,34 +2,66 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  samplePageNumbers,
-  sampleStarNumbers,
-  starsAtPageStart,
-  starsAtStargazer,
+  cumulativeWeeks,
+  lastStarTimestamp,
+  sampleCumulativeSeries,
 } from "../src/sampling.js";
 
-test("splits every repository into at most 15 equal star-count segments", () => {
-  assert.deepEqual(sampleStarNumbers(98), [7, 13, 20, 26, 33, 39, 46, 52, 59, 65, 72, 78, 85, 91]);
-  assert.equal(sampleStarNumbers(300_000).length, 14);
+test("orders weekly data from oldest to newest and accumulates stars", () => {
+  const series = cumulativeWeeks([
+    { week: 300, total: 5 },
+    { week: 100, total: 3 },
+    { week: 200, total: 0 },
+  ]);
+
+  assert.deepEqual(series.map((point) => point.stars), [3, 3, 8]);
+  assert.equal(series[0].starredAt, new Date(100_000).toISOString());
 });
 
-test("requests only the pages that contain segment boundaries", () => {
-  const pages = samplePageNumbers(sampleStarNumbers(300_000));
+test("selects 16 internal boundaries for 18 plotted points", () => {
+  const series = Array.from({ length: 100 }, (_, index) => ({
+    starredAt: new Date((index + 1) * 100_000).toISOString(),
+    stars: index + 1,
+  }));
+  const samples = sampleCumulativeSeries(series, 100);
 
-  assert.equal(pages.length, 14);
-  assert.equal(pages[0], 200);
-  assert.equal(pages.at(-1), 2_800);
-  assert.ok(pages.every((page, index) => index === 0 || page > pages[index - 1]));
+  assert.equal(samples.length, 16);
+  assert.equal(samples[0].stars, 6);
+  assert.equal(samples[1].stars, 12);
+  assert.equal(samples.at(-1).stars, 95);
 });
 
-test("maps an oldest-first page start to its cumulative star total", () => {
-  assert.equal(starsAtPageStart(300_000, 1), 1);
-  assert.equal(starsAtPageStart(300_000, 2_000), 199_901);
-  assert.equal(starsAtPageStart(300_000, 3_000), 299_901);
+test("finds the day of the most recent star", () => {
+  const weeks = [
+    { week: 1000, total: 2, days: [0, 1, 1, 0, 0, 0, 0] },
+    { week: 2000, total: 0, days: [0, 0, 0, 0, 0, 0, 0] },
+    { week: 4000, total: 2, days: [0, 0, 0, 2, 0, 0, 0] },
+  ];
+
+  assert.equal(
+    lastStarTimestamp(weeks),
+    new Date((4000 + 3 * 86_400) * 1000).toISOString(),
+  );
 });
 
-test("maps each stargazer in an oldest-first page to its cumulative total", () => {
-  assert.equal(starsAtStargazer(300_000, 1, 0), 1);
-  assert.equal(starsAtStargazer(300_000, 1, 99), 100);
-  assert.equal(starsAtStargazer(300_000, 3_000, 99), 300_000);
+test("returns null when no stars were received", () => {
+  assert.equal(lastStarTimestamp([]), null);
+  assert.equal(
+    lastStarTimestamp([{ week: 1000, total: 0, days: [0, 0, 0, 0, 0, 0, 0] }]),
+    null,
+  );
+});
+
+test("returns no internal samples when there is no star history", () => {
+  assert.deepEqual(sampleCumulativeSeries([], 0), []);
+  assert.deepEqual(sampleCumulativeSeries(cumulativeWeeks([]), 0), []);
+});
+
+test("omits boundaries at or beyond the current total", () => {
+  const series = cumulativeWeeks([
+    { week: 100, total: 10 },
+    { week: 200, total: 10 },
+  ]);
+
+  assert.deepEqual(sampleCumulativeSeries(series, 10), []);
 });

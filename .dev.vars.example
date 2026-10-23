@@ -1,1 +1,2 @@
+# Optional: raises GitHub API limits from 60 to 5,000 requests per hour.
 GITHUB_TOKEN=github_pat_replace_me

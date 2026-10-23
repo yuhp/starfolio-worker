@@ -1,7 +1,20 @@
-export const STARGAZERS_PER_PAGE: number;
-export const CHART_SEGMENTS: number;
+export const CHART_POINTS: number;
 
-export function sampleStarNumbers(totalStars: number, segments?: number): number[];
-export function samplePageNumbers(starNumbers: number[]): number[];
-export function starsAtPageStart(totalStars: number, page: number): number;
-export function starsAtStargazer(totalStars: number, page: number, index: number): number;
+export interface WeeklyStars {
+  week: number;
+  total: number;
+  days: number[];
+}
+
+export interface StarHistoryPoint {
+  starredAt: string;
+  stars: number;
+}
+
+export function cumulativeWeeks(weeks: WeeklyStars[]): StarHistoryPoint[];
+export function lastStarTimestamp(weeks: WeeklyStars[]): string | null;
+export function sampleCumulativeSeries(
+  series: StarHistoryPoint[],
+  totalStars: number,
+  points?: number,
+): StarHistoryPoint[];

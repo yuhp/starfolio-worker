@@ -1,41 +1,42 @@
 # Starfolio Worker
 
-A self-deployable Cloudflare Worker that generates and caches GitHub star-history SVG charts. It uses the GitHub API directly, so it does not depend on the Star History API or send your GitHub token to a chart SaaS.
+A self-deployable Cloudflare Worker that generates and caches GitHub star-history SVG charts. It uses GitHub's privacy-safe star history API directly, so it does not depend on the Star History API or send a GitHub token to a chart SaaS.
 
-> **For maintainers affected by GitHub's stargazers API restriction:** deploy Starfolio Worker in your own Cloudflare account, keep the token in a Worker Secret, and embed the cached SVG in your README.
+> **For maintainers who want a cached, self-hosted chart:** deploy Starfolio Worker in your own Cloudflare account and embed the generated SVG in your README. A GitHub token is optional but recommended for higher API rate limits.
 
 ## Is This For You?
 
 Use Starfolio Worker when you:
 
-- own or collaborate on the repositories whose star history you want to show;
+- want a README chart for any public GitHub repository;
 - have a Cloudflare account and can create a KV namespace;
-- want a public README chart without putting a GitHub token in the README or handing it to a third-party chart service.
+- want a cached SVG without a third-party chart service or client-side JavaScript.
 
-It cannot recover star timestamps for repositories where the token owner is neither an administrator nor a collaborator. It does not bypass GitHub's access restriction.
+Charts use GitHub's weekly, privacy-safe star history data and do not expose stargazer identities.
 
 ## Quick Start
 
 1. Add the repositories you want to track in [`src/projects.js`](src/projects.js).
 2. Create a Cloudflare KV namespace and add the GitHub Actions secrets and variables listed in the [deployment guide](docs/deploy.md).
-3. Push to `main`, run **Sync Star Token** once, then add the generated image URL to your README.
+3. Push to `main`, optionally run **Sync Star Token** once, then add the generated image URL to your README.
 
-The full setup, including the least-privilege Cloudflare deployment token, is in [docs/deploy.md](docs/deploy.md). Read [SECURITY.md](SECURITY.md) before creating the GitHub token.
+The full setup, including the least-privilege Cloudflare deployment token, is in [docs/deploy.md](docs/deploy.md). Read [SECURITY.md](SECURITY.md) before creating a GitHub token.
 
 ## Origin
 
 Starfolio Worker was originally inspired by [Star History](https://github.com/star-history/star-history), including its hand-drawn chart visual language.
 
-It exists because GitHub is restricting its stargazers API, the endpoint that returns who starred a repository and when. As announced on June 30, 2026, access to this data is being limited to a repository's own administrators and collaborators. This makes it impractical for a shared Star History-style SaaS to fetch star timestamps using a read-only token supplied for an arbitrary public repository.
+It began during the July 2026 stargazers API restriction, when per-stargazer timestamps became limited to a repository's administrators and collaborators. GitHub later added a privacy-safe, weekly star-history endpoint, which Starfolio Worker now uses. That means it can chart any public repository without a privileged token.
 
-By deploying this Worker in your own Cloudflare account and using your own GitHub token, you control the API credentials and the repository list used to generate the cached charts. The token stays in your Cloudflare Worker Secret rather than being supplied to a third-party chart SaaS, reducing the risk of exposing a higher-privilege token outside your own deployment.
+Deploying the Worker in your own Cloudflare account keeps chart generation and caching under your control, and public requests only receive the generated SVG. A GitHub token remains optional and is used only to raise API rate limits.
 
 ## Features
 
 - Serves static SVG charts from Cloudflare KV.
 - Refreshes configured repositories every hour with a Cloudflare Cron Trigger.
 - Supports `light` and `dark` themes.
-- Uses bounded, evenly distributed GitHub stargazer samples to render cumulative star history, including repositories with hundreds of thousands of stars.
+- Uses GitHub's privacy-safe, weekly star-history API for public repositories of any size.
+- Reduces each history to at most 18 plotted points for a consistent, smooth curve.
 - Is deployable from GitHub Actions without committing Cloudflare IDs or tokens.
 
 ## Example Charts
@@ -104,7 +105,11 @@ star-history:{project}:light
 star-history:{project}:dark
 ```
 
-Each refresh divides a repository into at most 15 equal cumulative-Star segments. It reads the repository's total star count and creation date, then concurrently requests only the stargazer pages containing the internal segment boundaries. The chart uses those boundary timestamps together with repository creation and current-total endpoints. Repositories with fewer than 15 stars use their available unique boundaries. This requires at most 15 GitHub requests per repository, including the metadata request.
+Each refresh reads repository metadata for its creation date and current total, then pages through the weekly star-history endpoint until it reaches the repository's first week. The weekly counts become a cumulative series, which is reduced to at most 18 plotted points: the repository creation point, up to 16 equal cumulative-Star boundaries, and the current total. Small repositories use whatever unique boundaries are available.
+
+The star-history endpoint returns up to 30 weeks per page, newest first. A typical repository needs a handful of requests; even a repository spanning GitHub's full lifetime needs roughly 32. Anonymous requests are limited to 60 per hour per IP, so a token is recommended for scheduled refreshes.
+
+The curve reaches its current total on the day of the most recent star, then extends flat to the current time. That avoids drawing old growth as if it happened today.
 
 ## Local Development
 
@@ -114,13 +119,13 @@ Each refresh divides a repository into at most 15 equal cumulative-Star segments
    npm install
    ```
 
-2. Create a local GitHub API token file:
+2. Optionally create a local GitHub API token file:
 
    ```bash
    cp .dev.vars.example .dev.vars
    ```
 
-3. Set `GITHUB_TOKEN` in `.dev.vars`. The token owner must be an administrator or collaborator of every tracked repository because GitHub restricts stargazer timestamps to those roles. Use the least-privileged token that grants access to the configured repositories.
+3. Set `GITHUB_TOKEN` in `.dev.vars` if you created the file. The token is optional for public repositories and needs no write access; it raises the GitHub API limit from 60 to 5,000 requests per hour.
 
 4. Copy the Cloudflare configuration template and fill in your Worker name and KV namespace ID:
 
@@ -148,7 +153,7 @@ Create these GitHub repository secrets:
 | --- | --- |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare API token with permission to deploy the target Worker. |
 | `CLOUDFLARE_ACCOUNT_ID` | Target Cloudflare account ID. |
-| `STAR_HISTORY_TOKEN` | GitHub token written to the deployed Worker as its `GITHUB_TOKEN` runtime secret. Its owner must be an administrator or collaborator of every tracked repository. |
+| `STAR_HISTORY_TOKEN` | Optional GitHub token written to the deployed Worker as its `GITHUB_TOKEN` runtime secret. It raises API rate limits and needs no write access. |
 
 Create these GitHub repository variables:
 
@@ -161,7 +166,7 @@ Push to `main` or run the **Deploy Worker** workflow manually. Pull requests and
 
 Run the separate **Sync Star Token** workflow only after initially setting or rotating `STAR_HISTORY_TOKEN`. It writes that GitHub secret to the Worker as `GITHUB_TOKEN` without triggering a code deployment.
 
-For a manual deployment, create `wrangler.jsonc` as above, authenticate with `npx wrangler login`, set the production secret, then deploy:
+For a manual deployment, create `wrangler.jsonc` as above, authenticate with `npx wrangler login`, optionally set the production secret, then deploy:
 
 ```bash
 npx wrangler secret put GITHUB_TOKEN
@@ -174,13 +179,13 @@ See [docs/design.md](docs/design.md) for the request path, scheduled refresh flo
 
 ## FAQ
 
-### Is Star History down?
+### Does this require a privileged GitHub token?
 
-No. Star History is still available. GitHub now limits the stargazers endpoint, which supplies the timestamps needed for a growth chart, to a repository's administrators and collaborators. That restriction makes it difficult for a shared service to fetch the history for arbitrary repositories.
+No. Starfolio Worker uses GitHub's privacy-safe weekly star-history endpoint, which works for public repositories without administrator or collaborator access. A token is optional; it raises the API limit from 60 to 5,000 requests per hour and makes scheduled refreshes more reliable.
 
-### Why not use a live third-party embed with my token?
+### Why self-deploy instead of using a hosted chart service?
 
-The token that can now read stargazer timestamps is no longer an unscoped read-only credential. Starfolio Worker does not remove that GitHub requirement, but it keeps the token in a Cloudflare Worker Secret under your account and only serves the generated SVG publicly. See [SECURITY.md](SECURITY.md) for scope and handling guidance.
+Self-deploying keeps the repository list and any token under your control, and the public endpoint only serves cached SVG. It also avoids depending on a third-party chart service for data that GitHub now exposes directly. See [SECURITY.md](SECURITY.md) for token handling.
 
 ### Does every README view call the GitHub API?
 
