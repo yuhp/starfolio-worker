@@ -40,9 +40,11 @@ test("uses the repository total instead of the sample count", () => {
 test("places the total at the last star date and stays flat until now", () => {
   const svg = renderChart("owner/repository", {
     createdAt: "2026-08-01T00:00:00Z",
-    lastStarAt: "2026-08-12T00:00:00Z",
     totalStars: 4,
-    samples: [{ starredAt: "2026-08-02T00:00:00Z", stars: 2 }],
+    samples: [
+      { starredAt: "2026-08-02T00:00:00Z", stars: 2 },
+      { starredAt: "2026-08-12T00:00:00Z", stars: 4 },
+    ],
   }, "light");
 
   assert.match(svg, /Q [\d.]+ 118\.00 [\d.]+ 118\.00 L [\d.]+ 118\.00/);

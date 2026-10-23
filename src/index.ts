@@ -6,9 +6,8 @@ interface Env {
 import { renderChart } from "./chart.js";
 import { projects } from "./projects.js";
 import {
-  cumulativeWeeks,
-  lastStarTimestamp,
-  sampleCumulativeSeries,
+  cumulativeDays,
+  sampleTimeIntervals,
   type WeeklyStars,
 } from "./sampling.js";
 
@@ -29,7 +28,6 @@ interface Repository {
 
 interface StarHistory {
   createdAt: string;
-  lastStarAt: string | null;
   totalStars: number;
   samples: Array<{ starredAt: string; stars: number }>;
 }
@@ -76,12 +74,15 @@ async function fetchStarHistory(repository: string, token?: string): Promise<Sta
     url = response.headers.get("link")?.match(/<([^>]+)>; rel="next"/)?.[1] ?? null;
   }
 
-  return {
-    createdAt,
-    lastStarAt: lastStarTimestamp(weeks),
-    totalStars,
-    samples: sampleCumulativeSeries(cumulativeWeeks(weeks), totalStars),
-  };
+  const series = cumulativeDays(weeks);
+  const samples = sampleTimeIntervals(series, createdAt);
+  const latest = series.at(-1);
+
+  if (latest !== undefined && latest.stars <= totalStars && samples.at(-1)?.starredAt !== latest.starredAt) {
+    samples.push(latest);
+  }
+
+  return { createdAt, totalStars, samples };
 }
 
 async function refreshProject(project: string, repository: string, env: Env) {

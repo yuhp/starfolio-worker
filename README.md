@@ -105,11 +105,11 @@ star-history:{project}:light
 star-history:{project}:dark
 ```
 
-Each refresh reads repository metadata for its creation date and current total, then pages through the weekly star-history endpoint until it reaches the repository's first week. The weekly counts become a cumulative series, which is reduced to at most 18 plotted points: the repository creation point, up to 16 equal cumulative-Star boundaries, and the current total. Small repositories use whatever unique boundaries are available.
+Each refresh reads repository metadata for its creation date and current total, then pages through the weekly star-history endpoint until it reaches the repository's first week. The per-day counts become a cumulative daily series, which is sampled at uniform time intervals across the repository's lifetime to preserve growth velocity. The final curve includes the repository creation point, 16 uniform time-interval samples, the latest known daily point, and the current total.
 
 The star-history endpoint returns up to 30 weeks per page, newest first. A typical repository needs a handful of requests; even a repository spanning GitHub's full lifetime needs roughly 32. Anonymous requests are limited to 60 per hour per IP, so a token is recommended for scheduled refreshes.
 
-The curve reaches its current total on the day of the most recent star, then extends flat to the current time. That avoids drawing old growth as if it happened today.
+Stars are plotted on the day they were received, not on the Sunday that starts their reporting week. If the latest known day already matches the current total, the curve extends flat to the current time; otherwise the small remaining rise is left at the end instead of being backdated.
 
 ## Local Development
 

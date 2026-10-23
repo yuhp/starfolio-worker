@@ -1,51 +1,53 @@
 export const CHART_POINTS = 18;
 
-export function cumulativeWeeks(weeks) {
+export function cumulativeDays(weeks) {
   let stars = 0;
 
   return [...weeks]
     .sort((left, right) => left.week - right.week)
-    .map(({ week, total }) => {
-      stars += total;
-      return {
-        starredAt: new Date(week * 1000).toISOString(),
+    .flatMap(({ week, days }) => (days ?? []).flatMap((count, day) => {
+      if (count <= 0) return [];
+
+      stars += count;
+      return [{
+        starredAt: new Date((week + day * 86_400) * 1000).toISOString(),
         stars,
-      };
-    });
+      }];
+    }));
 }
 
-export function lastStarTimestamp(weeks) {
-  const latest = weeks
-    .filter((week) => week.total > 0)
-    .reduce((current, week) => (
-      current === null || week.week > current.week ? week : current
-    ), null);
+export function sampleTimeIntervals(
+  series,
+  createdAt,
+  now = Date.now(),
+  points = CHART_POINTS,
+) {
+  if (series.length === 0) return [];
 
-  if (latest === null) return null;
-
-  const day = (latest.days ?? []).findLastIndex((count) => count > 0);
-  const offset = day < 0 ? 0 : day;
-
-  return new Date((latest.week + offset * 86_400) * 1000).toISOString();
-}
-
-export function sampleCumulativeSeries(series, totalStars, points = CHART_POINTS) {
-  if (series.length === 0 || totalStars <= 0) return [];
+  const firstDate = Date.parse(createdAt);
+  const duration = now - firstDate;
+  if (duration <= 0) return [];
 
   const segments = points - 1;
   const samples = [];
-  let index = 0;
+  let seriesIndex = 0;
+  let currentStars = 0;
 
   for (let segment = 1; segment < segments; segment += 1) {
-    const target = (segment * totalStars) / segments;
-    while (index < series.length && series[index].stars < target) index += 1;
+    const targetTime = firstDate + (segment * duration) / segments;
 
-    const point = series[index];
-    if (point === undefined) break;
-    if (point.stars <= 0 || point.stars >= totalStars) continue;
-    if (samples.at(-1)?.stars === point.stars) continue;
+    while (
+      seriesIndex < series.length &&
+      Date.parse(series[seriesIndex].starredAt) <= targetTime
+    ) {
+      currentStars = series[seriesIndex].stars;
+      seriesIndex += 1;
+    }
 
-    samples.push(point);
+    samples.push({
+      starredAt: new Date(targetTime).toISOString(),
+      stars: currentStars,
+    });
   }
 
   return samples;

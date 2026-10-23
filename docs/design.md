@@ -18,7 +18,7 @@ flowchart LR
 
   Cron[Cloudflare Cron: hourly] --> Projects[Read configured project list]
   Projects --> GitHub[GitHub star-history API]
-  GitHub --> Aggregate[Build weekly cumulative series]
+  GitHub --> Aggregate[Build daily cumulative series]
   Aggregate --> Render[Reduce to 18 points and render light and dark SVGs]
   Render --> WriteKV[Write SVG and refresh metadata to KV]
   WriteKV --> ReadKV
@@ -37,7 +37,7 @@ The two flows are independent in normal operation:
 | `src/projects.js` | Public registry of URL-safe project slugs and GitHub `owner/repository` values. |
 | `src/index.ts` | Worker routes, project and theme validation, KV reads, scheduled refresh orchestration, and GitHub API access. |
 | `src/chart.js` | Converts sampled timestamp and cumulative-total points into SVG for the selected theme. |
-| `src/sampling.js` | Converts weekly counts into a cumulative series and selects up to 16 equal cumulative-Star boundaries. |
+| `src/sampling.js` | Expands weekly day counts into a daily cumulative series and samples at uniform time intervals across the repository lifetime. |
 | Cloudflare KV | Stores generated SVG content and `refreshedAt` metadata. |
 | Cloudflare Cron Trigger | Invokes `scheduled()` every hour. |
 | GitHub API | Supplies privacy-safe weekly star counts for configured public repositories. |
@@ -75,15 +75,15 @@ For every configured repository, the refresh job:
 
 1. Requests repository metadata to read its creation date and current total star count.
 2. Pages through `/repos/{owner}/{repo}/stargazers/history` with `per_page=30`, following `Link` relations until the repository's first week is reached. The endpoint returns weekly aggregates newest first.
-3. Sorts the weeks oldest first and accumulates each week's `total` into a cumulative series.
-4. Splits the current total into 17 equal segments and selects up to 16 internal boundaries, using the first cumulative point at or above each target.
-5. Adds the repository creation `(createdAt, 0)`, the most recent star day `(lastStarAt, totalStars)`, and the current `(now, totalStars)` endpoints. When no stars arrive after that day, the tail is drawn flat.
+3. Sorts the weeks oldest first and expands each week's seven daily counts into a cumulative daily series, placing stars on the day they were received.
+4. Divides the repository lifetime from creation to the current time into 17 equal time segments and selects 16 internal sample points using the cumulative star total reached by each date.
+5. Adds the repository creation `(createdAt, 0)` and current `(now, totalStars)` endpoints. The latest known daily point is also kept so plateaued repositories stay flat until the present day without distorting intermediate dates.
 6. Draws a smooth cumulative curve and five display-only date ticks.
 7. Renders light and dark SVG variants, including a final total-star label to the right of the curve endpoint.
 
 The refresh requires one metadata request plus one request per 30 weeks of history. A typical repository needs a handful of requests; even a repository spanning GitHub's full lifetime needs about 32. The API is public and privacy-safe: no administrator or collaborator role is required, and stargazer identities are never returned. Anonymous callers are limited to 60 requests per hour per IP, while a configured token raises the limit to 5,000.
 
-The chart is reduced to at most 18 points at render time: the creation point, up to 16 internal boundaries, and the current total. The weekly series itself is not stored.
+The chart is reduced at render time to the creation point, 16 uniform time-interval samples, the latest known daily point, and the current total. The full daily series itself is not stored.
 
 ## Failure Behavior
 

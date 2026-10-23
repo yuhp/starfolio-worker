@@ -1,6 +1,5 @@
 interface StarHistory {
   createdAt: string;
-  lastStarAt?: string | null;
   totalStars: number;
   samples: Array<{
     starredAt: string;

@@ -11,10 +11,10 @@ export interface StarHistoryPoint {
   stars: number;
 }
 
-export function cumulativeWeeks(weeks: WeeklyStars[]): StarHistoryPoint[];
-export function lastStarTimestamp(weeks: WeeklyStars[]): string | null;
-export function sampleCumulativeSeries(
+export function cumulativeDays(weeks: WeeklyStars[]): StarHistoryPoint[];
+export function sampleTimeIntervals(
   series: StarHistoryPoint[],
-  totalStars: number,
+  createdAt: string,
+  now?: number,
   points?: number,
 ): StarHistoryPoint[];

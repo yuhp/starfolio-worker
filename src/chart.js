@@ -59,13 +59,14 @@ export function renderChart(repository, history, theme = "light") {
   const lastDate = Date.now();
   const duration = Math.max(lastDate - firstDate, 1);
   const maxStars = Math.max(history.totalStars, 1);
-  const samples = new Map();
-  for (const sample of [
+  const rawSamples = [
     { starredAt: history.createdAt, stars: 0 },
     ...history.samples,
-    ...(history.lastStarAt ? [{ starredAt: history.lastStarAt, stars: history.totalStars }] : []),
     { starredAt: new Date(lastDate).toISOString(), stars: history.totalStars },
-  ]) {
+  ].sort((a, b) => Date.parse(a.starredAt) - Date.parse(b.starredAt));
+
+  const samples = new Map();
+  for (const sample of rawSamples) {
     samples.set(Date.parse(sample.starredAt), sample);
   }
   const points = [...samples.values()].map(({ starredAt, stars }) => {
